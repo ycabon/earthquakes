@@ -159,22 +159,30 @@
             }
           });
 
-          const lastEarthquakes = await layer.queryFeatures({
+          // Query for the earthquakes ordered by magnitude.
+          // This will give us the last earthquake in the last week
+          const { features: [lastBigEarthquake] } = await layer.queryFeatures({
             orderByFields: ["mag DESC", "time DESC"],
             returnGeometry: true
           });
-          const lastBigEarthquake = lastEarthquakes.features[0];
-          const { extent } = await layer.queryExtent({
-            geometry: lastBigEarthquake.geometry,
-            distance: 50,
-            units: "kilometers"
-          });
-          const nearbyEarthquakes = await layer.queryFeatures({
-            geometry: lastBigEarthquake.geometry,
-            distance: 20,
-            units: "kilometers"
-          });
-          const fullTimeExtent = new TimeExtent(nearbyEarthquakes.features.reduce(
+
+          // - Get a 50 kilometers buffer for the clipping area
+          // - Query for all the earthquakes in a 50 kms radius
+          const [{ extent }, { features: nearbyEarthquakes }] = await Promise.all([
+            layer.queryExtent({
+              geometry: lastBigEarthquake.geometry,
+              distance: 50,
+              units: "kilometers"
+            }),
+            layer.queryFeatures({
+              geometry: lastBigEarthquake.geometry,
+              distance: 20,
+              units: "kilometers"
+            })
+          ]);
+
+          // Get the full time extent for those nearby earthquakes
+          const fullTimeExtent = new TimeExtent(nearbyEarthquakes.reduce(
             (timeExtent, feature) => ({
               start: Math.min(timeExtent.start, feature.attributes.time),
               end: Math.max(timeExtent.end, feature.attributes.time),
@@ -292,15 +300,15 @@
           document.getElementById("titleSpan").innerText = detail.properties.title;
           document.getElementById("titleSpan").href = detail.properties.url;
 
+          await view.whenLayerView(layer);
           await view.goTo({
-            target: nearbyEarthquakes.features,
+            target: nearbyEarthquakes,
             tilt: 120,
             heading: 45
-          });
+          }, { animate: false });
           document.getElementById("loadingDiv").remove();
 
           view.whenLayerView(layer).then((layerView) => layerView.highlight(lastBigEarthquake));
-
           scene.addMany(await Promise.all([loadContours(detail), loadNearbyCities(detail)]));
         })();
 
