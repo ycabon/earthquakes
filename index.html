@@ -6,16 +6,49 @@
       name="viewport"
       content="initial-scale=1,maximum-scale=1,user-scalable=no"
     />
-    <title>GeoJSONLayer - 4.12</title>
+    <title>Last Earthquake</title>
 
     <style>
       html,
       body,
       #viewDiv {
+        font-family: "Avenir Next W00","Helvetica Neue",Helvetica,Arial,sans-serif;
         padding: 0;
         margin: 0;
         height: 100%;
         width: 100%;
+      }
+
+      #titleDiv {
+        position: absolute;
+        bottom: 30px;
+        right: 15px;
+        background: rgba(36, 36, 36, .65);
+        backdrop-filter: blur(5px);
+        padding: 10px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      }
+
+      #titleSpan {
+        color: white;
+        font-size: 2rem;
+      }
+
+      #loadingDiv {
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(36, 36, 36, .65);
+        backdrop-filter: blur(5px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: absolute;
+      }
+
+      #loadingSpan {
+        color: white;
+        font-size: 2rem;
       }
     </style>
 
@@ -30,9 +63,10 @@
         "esri/request",
         "esri/WebScene",
         "esri/layers/GeoJSONLayer",
+        "esri/layers/FeatureLayer",
         "esri/views/SceneView",
         "esri/widgets/Zoom"
-      ], function(esriRequest, WebScene, GeoJSONLayer, SceneView, Zoom) {
+      ], function(esriRequest, WebScene, GeoJSONLayer, FeatureLayer, SceneView, Zoom) {
         (async () => {
           // If GeoJSON files are not on the same domain as your website, a CORS enabled server
           // or a proxy is required.
@@ -58,9 +92,7 @@
             symbol: {
               type: "simple-marker",
               color: "orange",
-              outline: {
-                color: "white"
-              }
+              outline: { color: "white" }
             },
             visualVariables: [
               {
@@ -122,11 +154,12 @@
           });
 
           const scene = new WebScene({
-            basemap: { portalItem: { id: "39858979a6ba4cfd96005bbe9bd4cf82" } },
+            basemap: "satellite",
             layers: [layer],
             ground: "world-elevation"
           });
 
+          scene.ground.opacity = 0.5;
           scene.ground.navigationConstraint = {
             type: "none"
           };
@@ -134,8 +167,16 @@
           const view = new SceneView({
             container: "viewDiv",
             map: scene,
-            qualityProfile: "high",
+            qualityProfile: "low",
             viewingMode: "local",
+            environment: {
+              atmosphereEnabled: false,
+              starsEnabled: false,
+              background: {
+                type: "color",
+                color: "black"
+              }
+            },
             highlightOptions: {
               fillOpacity: 0
             },
@@ -172,19 +213,22 @@
 
           view.clippingArea = extent;
 
+          const { data: detail } = await esriRequest(lastBigEarthquake.attributes.detail);
+          document.getElementById("titleSpan").innerText = detail.properties.title;
+
           await view.goTo({
             target: nearbyEarthquakes.features,
             tilt: 120,
             heading: 45
           }, { animate: false });
+          document.getElementById("loadingDiv").remove();
 
           layerView.highlight(lastBigEarthquake);
 
-          console.log(lastBigEarthquake.attributes);
+          scene.addMany(await Promise.all([loadContours(detail), loadNearbyCities(detail)]));
+        })();
 
-          const { data: detail } = await esriRequest(lastBigEarthquake.attributes.detail);
-          console.log(detail);
-
+        async function loadContours(earthquakeDetails) {
           function createSymbol(height, color) {
             return {
               type: "line-3d",
@@ -206,8 +250,8 @@
             };
           }
 
-          const contours = new GeoJSONLayer({
-            url: detail.properties.products.shakemap[0].contents["download/cont_mi.json"].url,
+          return new GeoJSONLayer({
+            url: earthquakeDetails.properties.products.shakemap[0].contents["download/cont_mi.json"].url,
             renderer: {
               type: "unique-value",
               field: "value",
@@ -231,15 +275,100 @@
               ]
             }
           });
+        }
 
-          scene.add(contours);
+        async function loadNearbyCities(earthquakeDetails) {
+          const { data: nearbyCities } = await esriRequest(earthquakeDetails.properties.products["nearby-cities"][0].contents["nearby-cities.json"].url, {
+            responseType: "json"
+          });
 
-        })();
+          return new FeatureLayer({
+            objectIdField: "OBJECTID",
+            fields: [
+              { name: "direction", type: "string" },
+              { name: "distance", type: "double" },
+              { name: "name", type: "string" },
+            ],
+            source: nearbyCities.map(({ name, longitude, latitude, distance, direction }) => ({
+              geometry: {
+                type: "point",
+                longitude,
+                latitude
+              },
+              attributes: {
+                name,
+                distance,
+                direction
+              }
+            })),
+            renderer: {
+              type: "simple", // autocasts as new SimpleRenderer()
+              symbol: {
+                type: "point-3d", // autocasts as new PointSymbol3D()
+                symbolLayers: [
+                  {
+                    type: "icon", // autocasts as new IconSymbol3DLayer()
+                    resource: {
+                      primitive: "circle"
+                    },
+                    material: {
+                      color: "black"
+                    },
+                    size: 4
+                  }
+                ]
+              }
+            },
+            labelingInfo: [
+              {
+                // When using callouts on labels, "above-center" is the only allowed position
+                labelPlacement: "above-center",
+                labelExpressionInfo: {
+                  value: "{name} - {distance}kms"
+                },
+                symbol: {
+                  type: "label-3d", // autocasts as new LabelSymbol3D()
+                  symbolLayers: [
+                    {
+                      type: "text", // autocasts as new TextSymbol3DLayer()
+                      material: {
+                        color: "white"
+                      },
+                      halo: {
+                        color: "black",
+                        size: 2
+                      },
+                      size: 16
+                    }
+                  ],
+                  // Labels need a small vertical offset that will be used by the callout
+                  verticalOffset: {
+                    screenLength: 150,
+                    maxWorldLength: 20000,
+                    minWorldLength: 8000
+                  },
+                  // The callout has to have a defined type (currently only line is possible)
+                  // The size, the color and the border color can be customized
+                  callout: {
+                    type: "line", // autocasts as new LineCallout3D()
+                    size: 0.5,
+                    color: [0, 0, 0],
+                    border: {
+                      color: [255, 255, 255, 0.7]
+                    }
+                  }
+                }
+              }
+            ]
+          });
+        }
       });
     </script>
   </head>
 
   <body>
     <div id="viewDiv"></div>
+    <div id="titleDiv"><span id="titleSpan"></span></div>
+    <div id="loadingDiv"><span id="loadingSpan">LOADING...</span></div>
   </body>
 </html>
