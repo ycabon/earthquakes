@@ -162,7 +162,7 @@
           const scene = new WebScene({
             basemap: "satellite",
             layers: [layer],
-            ground: "world-elevation"
+            //ground: "world-elevation"
           });
 
           scene.ground.opacity = 0.75;
@@ -208,12 +208,6 @@
           });
 
           const lastBigEarthquake = lastEarthquakes.features[0];
-          const { extent } = await layer.queryExtent({
-            geometry: lastBigEarthquake.geometry,
-            distance: 50,
-            units: "kilometers"
-          });
-
           const nearbyEarthquakes = await layer.queryFeatures({
             geometry: lastBigEarthquake.geometry,
             distance: 20,
@@ -288,9 +282,6 @@
             }
           ];
 
-
-          view.clippingArea = extent;
-
           const { data: detail } = await esriRequest(lastBigEarthquake.attributes.detail);
           document.getElementById("titleSpan").innerText = detail.properties.title;
           document.getElementById("titleSpan").href = detail.properties.url;
@@ -300,6 +291,12 @@
             tilt: 120,
             heading: 45
           }, { animate: false });
+          const { extent } = await layer.queryExtent({
+            geometry: lastBigEarthquake.geometry,
+            distance: 50,
+            units: "kilometers"
+          });
+          view.clippingArea = extent;
           document.getElementById("loadingDiv").remove();
 
           layerView.highlight(lastBigEarthquake);
@@ -448,6 +445,6 @@
   <body>
     <div id="viewDiv"></div>
     <div id="titleDiv"><a id="titleSpan" target="_blank"></a></div>
-    <div id="loadingDiv"><span id="loadingSpan">LOADING...</span></div>
+    <div id="loadingDiv"><span id="loadingSpan">Fetching the last earthquake data...</span></div>
   </body>
 </html>
