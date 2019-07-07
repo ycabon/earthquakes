@@ -159,13 +159,36 @@
             }
           });
 
+          const lastEarthquakes = await layer.queryFeatures({
+            orderByFields: ["mag DESC", "time DESC"],
+            returnGeometry: true
+          });
+          const lastBigEarthquake = lastEarthquakes.features[0];
+          const { extent } = await layer.queryExtent({
+            geometry: lastBigEarthquake.geometry,
+            distance: 50,
+            units: "kilometers"
+          });
+          const nearbyEarthquakes = await layer.queryFeatures({
+            geometry: lastBigEarthquake.geometry,
+            distance: 20,
+            units: "kilometers"
+          });
+          const fullTimeExtent = new TimeExtent(nearbyEarthquakes.features.reduce(
+            (timeExtent, feature) => ({
+              start: Math.min(timeExtent.start, feature.attributes.time),
+              end: Math.max(timeExtent.end, feature.attributes.time),
+            }),
+            { start: Number.POSITIVE_INFINITY, end: Number.NEGATIVE_INFINITY }
+          ));
+
           const scene = new WebScene({
             basemap: "satellite",
             layers: [layer],
             ground: "world-elevation"
           });
 
-          scene.ground.opacity = 0.75;
+          scene.ground.opacity = 0.5;
           scene.ground.navigationConstraint = {
             type: "none"
           };
@@ -175,6 +198,8 @@
             map: scene,
             qualityProfile: "low",
             viewingMode: "local",
+            extent,
+            clippingArea: extent,
             environment: {
               atmosphereEnabled: false,
               starsEnabled: false,
@@ -200,26 +225,6 @@
           const zoom = new Zoom({ view, layout: "horizontal" });
           view.ui.add(zoom, "bottom-left");
 
-          const layerView = await view.whenLayerView(layer);
-
-          const lastEarthquakes = await layer.queryFeatures({
-            orderByFields: ["mag DESC", "time DESC"],
-            returnGeometry: true
-          });
-
-          const lastBigEarthquake = lastEarthquakes.features[0];
-          const nearbyEarthquakes = await layer.queryFeatures({
-            geometry: lastBigEarthquake.geometry,
-            distance: 20,
-            units: "kilometers"
-          });
-          const fullTimeExtent = new TimeExtent(nearbyEarthquakes.features.reduce(
-            (timeExtent, feature) => ({
-              start: Math.min(timeExtent.start, feature.attributes.time),
-              end: Math.max(timeExtent.end, feature.attributes.time),
-            }),
-            { start: Number.POSITIVE_INFINITY, end: Number.NEGATIVE_INFINITY }
-          ));
           const timeSlider = new TimeSlider({
             view,
             mode: "time-window",
@@ -237,6 +242,7 @@
             ],
             fullTimeExtent
           });
+
           view.ui.add(timeSlider, "manual");
 
           layer.labelingInfo = [
@@ -290,16 +296,10 @@
             target: nearbyEarthquakes.features,
             tilt: 120,
             heading: 45
-          }, { animate: false });
-          const { extent } = await layer.queryExtent({
-            geometry: lastBigEarthquake.geometry,
-            distance: 50,
-            units: "kilometers"
           });
-          view.clippingArea = extent;
           document.getElementById("loadingDiv").remove();
 
-          layerView.highlight(lastBigEarthquake);
+          view.whenLayerView(layer).then((layerView) => layerView.highlight(lastBigEarthquake));
 
           scene.addMany(await Promise.all([loadContours(detail), loadNearbyCities(detail)]));
         })();
