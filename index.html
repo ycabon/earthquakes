@@ -72,8 +72,10 @@
         "esri/layers/FeatureLayer",
         "esri/views/SceneView",
         "esri/widgets/Zoom",
-        "esri/widgets/TimeSlider"
-      ], function(esriRequest, WebScene, GeoJSONLayer, FeatureLayer, SceneView, Zoom, TimeSlider) {
+        "esri/widgets/TimeSlider",
+        "esri/widgets/Expand",
+        "esri/widgets/Bookmarks"
+      ], function(esriRequest, WebScene, GeoJSONLayer, FeatureLayer, SceneView, Zoom, TimeSlider, Expand, Bookmarks) {
         (async () => {
           // If GeoJSON files are not on the same domain as your website, a CORS enabled server
           // or a proxy is required.
@@ -236,6 +238,50 @@
           //   }), { start: Number.POSITIVE_INFINITY, end: Number.NEGATIVE_INFINITY })
           // });
           // view.ui.add(timeSlider, "manual");
+
+          layer.labelingInfo = [
+            {
+              // When using callouts on labels, "above-center" is the only allowed position
+              where: `mag = ${lastBigEarthquake.attributes.mag}`,
+              labelPlacement: "above-center",
+              labelExpressionInfo: {
+                value: "Magnitude {mag}"
+              },
+              symbol: {
+                type: "label-3d", // autocasts as new LabelSymbol3D()
+                symbolLayers: [
+                  {
+                    type: "text", // autocasts as new TextSymbol3DLayer()
+                    material: {
+                      color: "orange"
+                    },
+                    halo: {
+                      color: "red",
+                      size: 2
+                    },
+                    size: 20
+                  }
+                ],
+                // Labels need a small vertical offset that will be used by the callout
+                verticalOffset: {
+                  screenLength: -300,
+                  maxWorldLength: 20000,
+                  minWorldLength: 8000
+                },
+                // The callout has to have a defined type (currently only line is possible)
+                // The size, the color and the border color can be customized
+                callout: {
+                  type: "line", // autocasts as new LineCallout3D()
+                  size: 0.5,
+                  color: [0, 0, 0],
+                  border: {
+                    color: [255, 255, 255, 0.7]
+                  }
+                }
+              }
+            }
+          ];
+
 
           view.clippingArea = extent;
 
