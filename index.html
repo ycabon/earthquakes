@@ -262,35 +262,12 @@
                 value: "Magnitude {mag}"
               },
               symbol: {
-                type: "label-3d", // autocasts as new LabelSymbol3D()
-                symbolLayers: [
-                  {
-                    type: "text", // autocasts as new TextSymbol3DLayer()
-                    material: {
-                      color: "orange"
-                    },
-                    halo: {
-                      color: "red",
-                      size: 2
-                    },
-                    size: 20
-                  }
-                ],
-                // Labels need a small vertical offset that will be used by the callout
-                verticalOffset: {
-                  screenLength: -300,
-                  maxWorldLength: 20000,
-                  minWorldLength: 8000
-                },
-                // The callout has to have a defined type (currently only line is possible)
-                // The size, the color and the border color can be customized
-                callout: {
-                  type: "line", // autocasts as new LineCallout3D()
-                  size: 0.5,
-                  color: [0, 0, 0],
-                  border: {
-                    color: [255, 255, 255, 0.7]
-                  }
+                type: "text",
+                haloColor: "red",
+                haloSize: "2px",
+                color: "orange",
+                font: {
+                  size: 20
                 }
               }
             }
@@ -386,12 +363,12 @@
               }
             })),
             renderer: {
-              type: "simple", // autocasts as new SimpleRenderer()
+              type: "simple",
               symbol: {
-                type: "point-3d", // autocasts as new PointSymbol3D()
+                type: "point-3d",
                 symbolLayers: [
                   {
-                    type: "icon", // autocasts as new IconSymbol3DLayer()
+                    type: "icon",
                     resource: {
                       primitive: "circle"
                     },
@@ -405,16 +382,15 @@
             },
             labelingInfo: [
               {
-                // When using callouts on labels, "above-center" is the only allowed position
                 labelPlacement: "above-center",
                 labelExpressionInfo: {
                   value: "{name} - {distance}kms"
                 },
                 symbol: {
-                  type: "label-3d", // autocasts as new LabelSymbol3D()
+                  type: "label-3d",
                   symbolLayers: [
                     {
-                      type: "text", // autocasts as new TextSymbol3DLayer()
+                      type: "text",
                       material: {
                         color: "white"
                       },
@@ -425,16 +401,13 @@
                       size: 16
                     }
                   ],
-                  // Labels need a small vertical offset that will be used by the callout
                   verticalOffset: {
                     screenLength: 300,
                     maxWorldLength: 20000,
                     minWorldLength: 8000
                   },
-                  // The callout has to have a defined type (currently only line is possible)
-                  // The size, the color and the border color can be customized
                   callout: {
-                    type: "line", // autocasts as new LineCallout3D()
+                    type: "line",
                     size: 0.5,
                     color: [0, 0, 0],
                     border: {
