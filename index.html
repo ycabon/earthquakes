@@ -135,7 +135,7 @@
             title: "USGS Earthquakes",
             copyright: "USGS",
             renderer,
-            definitionExpression: "type = 'earthquake' and mag > 0",
+            definitionExpression: "type = 'earthquake' and mag > 3",
             spatialReference: { wkid: 3857 },
             fields: [
               { name: "mag", type: "double" },
@@ -370,7 +370,7 @@
                   ],
                   // Labels need a small vertical offset that will be used by the callout
                   verticalOffset: {
-                    screenLength: 150,
+                    screenLength: 300,
                     maxWorldLength: 20000,
                     minWorldLength: 8000
                   },
