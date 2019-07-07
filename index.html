@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>GeoJSONLayer - 4.12</title>
+
+    <style>
+      html,
+      body,
+      #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+    </style>
+
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.12/esri/themes/dark/main.css"
+    />
+    <script src="https://js.arcgis.com/4.12/"></script>
+
+    <script>
+      require([
+        "esri/request",
+        "esri/WebScene",
+        "esri/layers/GeoJSONLayer",
+        "esri/views/SceneView",
+        "esri/widgets/Zoom"
+      ], function(esriRequest, WebScene, GeoJSONLayer, SceneView, Zoom) {
+        (async () => {
+          // If GeoJSON files are not on the same domain as your website, a CORS enabled server
+          // or a proxy is required.
+          const url =
+            "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson";
+
+          const popupTemplate = {
+            title: "Earthquake Info",
+            content: "Magnitude {mag} {type} hit {place} on {time}",
+            fieldInfos: [
+              {
+                fieldName: "time",
+                format: {
+                  dateFormat: "short-date-short-time"
+                }
+              }
+            ]
+          };
+
+          const renderer = {
+            type: "simple",
+            field: "mag",
+            symbol: {
+              type: "simple-marker",
+              color: "orange",
+              outline: {
+                color: "white"
+              }
+            },
+            visualVariables: [
+              {
+                type: "size",
+                field: "mag",
+                stops: [
+                  {
+                    value: 2,
+                    size: "3.125px"
+                  },
+                  {
+                    value: 3,
+                    size: "6.25px"
+                  },
+                  {
+                    value: 4,
+                    size: "12.5px"
+                  },
+                  {
+                    value: 5,
+                    size: "25px"
+                  },
+                  {
+                    value: 6,
+                    size: "50px"
+                  },
+                  {
+                    value: 7,
+                    size: "100px"
+                  },
+                  {
+                    value: 8,
+                    size: "200px"
+                  },
+                  {
+                    value: 9,
+                    size: "400px"
+                  }
+                ]
+              }
+            ]
+          };
+
+          const layer = new GeoJSONLayer({
+            url,
+            title: "USGS Earthquakes",
+            copyright: "USGS",
+            popupTemplate,
+            renderer,
+            definitionExpression: "type = 'earthquake' and mag > 0",
+            spatialReference: { wkid: 3857 },
+            elevationInfo: {
+              mode: "absolute-height",
+              unit: "kilometers",
+              featureExpressionInfo: {
+                expression: "Geometry($feature).z * -1"
+              }
+            }
+          });
+
+          const scene = new WebScene({
+            basemap: { portalItem: { id: "39858979a6ba4cfd96005bbe9bd4cf82" } },
+            layers: [layer],
+            ground: "world-elevation"
+          });
+
+          scene.ground.navigationConstraint = {
+            type: "none"
+          };
+
+          const view = new SceneView({
+            container: "viewDiv",
+            map: scene,
+            qualityProfile: "high",
+            viewingMode: "local",
+            highlightOptions: {
+              fillOpacity: 0
+            },
+            ui: {
+              padding: {
+                top: 80,
+                right: 300
+              },
+              components: ["attribution"]
+            },
+          });
+
+          const zoom = new Zoom({ view, layout: "horizontal" });
+          view.ui.add(zoom, "bottom-left");
+
+          const layerView = await view.whenLayerView(layer);
+
+          const lastEarthquakes = await layer.queryFeatures({
+            orderByFields: ["mag DESC", "time DESC"],
+            returnGeometry: true
+          });
+
+          const lastBigEarthquake = lastEarthquakes.features[0];
+          const { extent } = await layer.queryExtent({
+            geometry: lastBigEarthquake.geometry,
+            distance: 50,
+            units: "kilometers"
+          });
+          const nearbyEarthquakes = await layer.queryFeatures({
+            geometry: lastBigEarthquake.geometry,
+            distance: 20,
+            units: "kilometers"
+          });
+
+          view.clippingArea = extent;
+
+          await view.goTo({
+            target: nearbyEarthquakes.features,
+            tilt: 120,
+            heading: 45
+          }, { animate: false });
+
+          layerView.highlight(lastBigEarthquake);
+
+          console.log(lastBigEarthquake.attributes);
+
+          const { data: detail } = await esriRequest(lastBigEarthquake.attributes.detail);
+          console.log(detail);
+
+          function createSymbol(height, color) {
+            return {
+              type: "line-3d",
+              symbolLayers: [
+                {
+                  type: "path",
+                  profile: "quad",
+                  material: {
+                    color
+                  },
+                  width: 10,
+                  height,
+                  join: "round",
+                  cap: "round",
+                  anchor: "bottom",
+                  profileRotation: "heading"
+                }
+              ]
+            };
+          }
+
+          const contours = new GeoJSONLayer({
+            url: detail.properties.products.shakemap[0].contents["download/cont_mi.json"].url,
+            renderer: {
+              type: "unique-value",
+              field: "value",
+              uniqueValueInfos: [
+                { value: 1, symbol: createSymbol(Math.exp(1), "white") },
+                { value: 2, symbol: createSymbol(Math.exp(2), "#bfccff") },
+                { value: 2.5, symbol: createSymbol(Math.exp(2.5), "#b0d9ff") },
+                { value: 3, symbol: createSymbol(Math.exp(3), "#a0e6ff") },
+                { value: 3.5, symbol: createSymbol(Math.exp(3.5), "#90f3ff") },
+                { value: 4, symbol: createSymbol(Math.exp(4), "#80ffff") },
+                { value: 4.5, symbol: createSymbol(Math.exp(4.5), "#7dffc9") },
+                { value: 5, symbol: createSymbol(Math.exp(5), "#7aff93") },
+                { value: 5.5, symbol: createSymbol(Math.exp(5.5), "#bdff4a") },
+                { value: 6, symbol: createSymbol(Math.exp(6), "#ffff00") },
+                { value: 6.5, symbol: createSymbol(Math.exp(6.5), "#ffe300") },
+                { value: 7, symbol: createSymbol(Math.exp(7), "#ffc800") },
+                { value: 7.5, symbol: createSymbol(Math.exp(7.5), "#ffad00") },
+                { value: 8, symbol: createSymbol(Math.exp(8), "#ff9100") },
+                { value: 8.5, symbol: createSymbol(Math.exp(8.5), "#ff4900") },
+                { value: 9, symbol: createSymbol(Math.exp(9), "#ff0000") }
+              ]
+            }
+          });
+
+          scene.add(contours);
+
+        })();
+      });
+    </script>
+  </head>
+
+  <body>
+    <div id="viewDiv"></div>
+  </body>
+</html>
