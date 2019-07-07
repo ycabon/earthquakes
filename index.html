@@ -21,7 +21,7 @@
 
       #titleDiv {
         position: absolute;
-        bottom: 30px;
+        top: 15px;
         right: 15px;
         background: rgba(36, 36, 36, .65);
         backdrop-filter: blur(5px);
@@ -50,6 +50,12 @@
         color: white;
         font-size: 2rem;
       }
+
+      .esri-time-slider {
+        left: 0;
+        right: 0;
+        bottom: 15px;
+      }
     </style>
 
     <link
@@ -65,26 +71,14 @@
         "esri/layers/GeoJSONLayer",
         "esri/layers/FeatureLayer",
         "esri/views/SceneView",
-        "esri/widgets/Zoom"
-      ], function(esriRequest, WebScene, GeoJSONLayer, FeatureLayer, SceneView, Zoom) {
+        "esri/widgets/Zoom",
+        "esri/widgets/TimeSlider"
+      ], function(esriRequest, WebScene, GeoJSONLayer, FeatureLayer, SceneView, Zoom, TimeSlider) {
         (async () => {
           // If GeoJSON files are not on the same domain as your website, a CORS enabled server
           // or a proxy is required.
           const url =
             "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson";
-
-          const popupTemplate = {
-            title: "Earthquake Info",
-            content: "Magnitude {mag} {type} hit {place} on {time}",
-            fieldInfos: [
-              {
-                fieldName: "time",
-                format: {
-                  dateFormat: "short-date-short-time"
-                }
-              }
-            ]
-          };
 
           const renderer = {
             type: "simple",
@@ -101,35 +95,35 @@
                 stops: [
                   {
                     value: 2,
-                    size: "3.125px"
+                    size: "1.5625px"
                   },
                   {
                     value: 3,
-                    size: "6.25px"
+                    size: "3.125px"
                   },
                   {
                     value: 4,
-                    size: "12.5px"
+                    size: "6.25px"
                   },
                   {
                     value: 5,
-                    size: "25px"
+                    size: "12.5px"
                   },
                   {
                     value: 6,
-                    size: "50px"
+                    size: "25px"
                   },
                   {
                     value: 7,
-                    size: "100px"
+                    size: "50px"
                   },
                   {
                     value: 8,
-                    size: "200px"
+                    size: "100px"
                   },
                   {
                     value: 9,
-                    size: "400px"
+                    size: "200px"
                   }
                 ]
               }
@@ -140,16 +134,24 @@
             url,
             title: "USGS Earthquakes",
             copyright: "USGS",
-            popupTemplate,
             renderer,
             definitionExpression: "type = 'earthquake' and mag > 0",
             spatialReference: { wkid: 3857 },
+            fields: [
+              { name: "mag", type: "double" },
+              { name: "time", type: "date" },
+              { name: "type", type: "string" },
+              { name: "detail", type: "string" }
+            ],
             elevationInfo: {
               mode: "absolute-height",
               unit: "kilometers",
               featureExpressionInfo: {
                 expression: "Geometry($feature).z * -1"
               }
+            },
+            timeInfo: {
+              startField: "time"
             }
           });
 
@@ -159,7 +161,7 @@
             ground: "world-elevation"
           });
 
-          scene.ground.opacity = 0.5;
+          scene.ground.opacity = 0.75;
           scene.ground.navigationConstraint = {
             type: "none"
           };
@@ -177,8 +179,10 @@
                 color: "black"
               }
             },
+            popup: null,
             highlightOptions: {
-              fillOpacity: 0
+              fillOpacity: 0,
+              color: "red"
             },
             ui: {
               padding: {
@@ -205,16 +209,39 @@
             distance: 50,
             units: "kilometers"
           });
+
           const nearbyEarthquakes = await layer.queryFeatures({
             geometry: lastBigEarthquake.geometry,
             distance: 20,
             units: "kilometers"
           });
 
+          // view.timeExtent = {
+          //   start: lastBigEarthquake.attributes.time - 5 * 60 * 60 * 1000,
+          //   end: lastBigEarthquake.attributes.time + 5 * 60 * 60 * 1000
+          // };
+          // const timeSlider = new TimeSlider({
+          //   view,
+          //   mode: "time-window",
+          //   playRate: 32,
+          //   stops: {
+          //     interval: {
+          //       value: 1,
+          //       unit: "hours"
+          //     }
+          //   },
+          //   fullTimeExtent: nearbyEarthquakes.features.reduce((timeExtent, feature) => ({
+          //     start: Math.min(timeExtent.start, feature.attributes.time),
+          //     end: Math.max(timeExtent.end, feature.attributes.time),
+          //   }), { start: Number.POSITIVE_INFINITY, end: Number.NEGATIVE_INFINITY })
+          // });
+          // view.ui.add(timeSlider, "manual");
+
           view.clippingArea = extent;
 
           const { data: detail } = await esriRequest(lastBigEarthquake.attributes.detail);
           document.getElementById("titleSpan").innerText = detail.properties.title;
+          document.getElementById("titleSpan").href = detail.properties.url;
 
           await view.goTo({
             target: nearbyEarthquakes.features,
@@ -368,7 +395,7 @@
 
   <body>
     <div id="viewDiv"></div>
-    <div id="titleDiv"><span id="titleSpan"></span></div>
+    <div id="titleDiv"><a id="titleSpan" target="_blank"></a></div>
     <div id="loadingDiv"><span id="loadingSpan">LOADING...</span></div>
   </body>
 </html>
