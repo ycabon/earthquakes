@@ -189,6 +189,11 @@
             }),
             { start: Number.POSITIVE_INFINITY, end: Number.NEGATIVE_INFINITY }
           ));
+          // see 12 hours of data around the earthquake
+          const timeExtent = new TimeExtent({
+            start: new Date(lastBigEarthquake.attributes.time - 6 * 60 * 60 * 1000),
+            end: new Date(lastBigEarthquake.attributes.time + 6 * 60 * 60 * 1000),
+          })
 
           const scene = new WebScene({
             basemap: "satellite",
@@ -233,26 +238,6 @@
           const zoom = new Zoom({ view, layout: "horizontal" });
           view.ui.add(zoom, "bottom-left");
 
-          const timeSlider = new TimeSlider({
-            view,
-            mode: "time-window",
-            playRate: 64,
-            stops: {
-              interval: {
-                value: 1,
-                unit: "hours"
-              },
-            },
-            values:[
-              // see 12 hours of data around the earthquake
-              new Date(lastBigEarthquake.attributes.time - 6 * 60 * 60 * 1000),
-              new Date(lastBigEarthquake.attributes.time + 6 * 60 * 60 * 1000)
-            ],
-            fullTimeExtent
-          });
-
-          view.ui.add(timeSlider, "manual");
-
           layer.labelingInfo = [
             {
               // When using callouts on labels, "above-center" is the only allowed position
@@ -285,7 +270,23 @@
           }, { animate: false });
           document.getElementById("loadingDiv").remove();
 
-          view.whenLayerView(layer).then((layerView) => layerView.highlight(lastBigEarthquake));
+          view.whenLayerView(layer).then((layerView) => {
+            layerView.highlight(lastBigEarthquake);
+            const timeSlider = new TimeSlider({
+              view,
+              mode: "time-window",
+              playRate: 64,
+              stops: {
+                interval: {
+                  value: 1,
+                  unit: "hours"
+                },
+              },
+              values: [timeExtent.start, timeExtent.end],
+              fullTimeExtent
+            });
+            view.ui.add(timeSlider, "manual");
+          });
           scene.addMany(await Promise.all([loadContours(detail), loadNearbyCities(detail)]));
         })();
 
