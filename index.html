@@ -68,6 +68,7 @@
     <script>
       require([
         "esri/request",
+        "esri/TimeExtent",
         "esri/WebScene",
         "esri/layers/GeoJSONLayer",
         "esri/layers/FeatureLayer",
@@ -76,7 +77,7 @@
         "esri/widgets/TimeSlider",
         "esri/widgets/Expand",
         "esri/widgets/Bookmarks"
-      ], function(esriRequest, WebScene, GeoJSONLayer, FeatureLayer, SceneView, Zoom, TimeSlider, Expand, Bookmarks) {
+      ], function(esriRequest, TimeExtent, WebScene, GeoJSONLayer, FeatureLayer, SceneView, Zoom, TimeSlider, Expand, Bookmarks) {
         (async () => {
           // If GeoJSON files are not on the same domain as your website, a CORS enabled server
           // or a proxy is required.
@@ -218,27 +219,31 @@
             distance: 20,
             units: "kilometers"
           });
-
-          // view.timeExtent = {
-          //   start: lastBigEarthquake.attributes.time - 5 * 60 * 60 * 1000,
-          //   end: lastBigEarthquake.attributes.time + 5 * 60 * 60 * 1000
-          // };
-          // const timeSlider = new TimeSlider({
-          //   view,
-          //   mode: "time-window",
-          //   playRate: 32,
-          //   stops: {
-          //     interval: {
-          //       value: 1,
-          //       unit: "hours"
-          //     }
-          //   },
-          //   fullTimeExtent: nearbyEarthquakes.features.reduce((timeExtent, feature) => ({
-          //     start: Math.min(timeExtent.start, feature.attributes.time),
-          //     end: Math.max(timeExtent.end, feature.attributes.time),
-          //   }), { start: Number.POSITIVE_INFINITY, end: Number.NEGATIVE_INFINITY })
-          // });
-          // view.ui.add(timeSlider, "manual");
+          const fullTimeExtent = new TimeExtent(nearbyEarthquakes.features.reduce(
+            (timeExtent, feature) => ({
+              start: Math.min(timeExtent.start, feature.attributes.time),
+              end: Math.max(timeExtent.end, feature.attributes.time),
+            }),
+            { start: Number.POSITIVE_INFINITY, end: Number.NEGATIVE_INFINITY }
+          ));
+          const timeSlider = new TimeSlider({
+            view,
+            mode: "time-window",
+            playRate: 64,
+            stops: {
+              interval: {
+                value: 1,
+                unit: "hours"
+              },
+            },
+            values:[
+              // see 12 hours of data around the earthquake
+              new Date(lastBigEarthquake.attributes.time - 6 * 60 * 60 * 1000),
+              new Date(lastBigEarthquake.attributes.time + 6 * 60 * 60 * 1000)
+            ],
+            fullTimeExtent
+          });
+          view.ui.add(timeSlider, "manual");
 
           layer.labelingInfo = [
             {
