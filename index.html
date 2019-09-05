@@ -287,10 +287,18 @@
             });
             view.ui.add(timeSlider, "manual");
           });
-          scene.addMany(await Promise.all([loadContours(detail), loadNearbyCities(detail)]));
+
+          let layers = await Promise.all([loadContours(detail), loadNearbyCities(detail)]);
+
+          layers = layers.filter(layer => !!layer);
+          scene.addMany(layers);
         })();
 
         async function loadContours(earthquakeDetails) {
+          if (!earthquakeDetails.properties.products.shakemap) {
+            return null;
+          }
+
           function createSymbol(height, color) {
             return {
               type: "line-3d",
@@ -340,6 +348,10 @@
         }
 
         async function loadNearbyCities(earthquakeDetails) {
+          if (!earthquakeDetails.properties.products["nearby-cities"]) {
+            return null;
+          }
+
           const { data: nearbyCities } = await esriRequest(earthquakeDetails.properties.products["nearby-cities"][0].contents["nearby-cities.json"].url, {
             responseType: "json"
           });
