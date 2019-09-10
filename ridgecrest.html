@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <title>Biggest Earthquake in the past week</title>
+
+    <style>
+      html,
+      body,
+      #viewDiv {
+        font-family: "Avenir Next W00","Helvetica Neue",Helvetica,Arial,sans-serif;
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+
+      #titleDiv {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        background: rgba(36, 36, 36, .65);
+        backdrop-filter: blur(5px);
+        padding: 10px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      }
+
+      #titleSpan {
+        color: white;
+        font-size: 2rem;
+      }
+
+      #loadingDiv {
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(36, 36, 36, .65);
+        backdrop-filter: blur(5px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: absolute;
+      }
+
+      #loadingSpan {
+        color: white;
+        font-size: 2rem;
+      }
+
+      .esri-time-slider {
+        left: 0;
+        right: 0;
+        bottom: 15px;
+      }
+    </style>
+
+    <link
+      rel="stylesheet"
+      href="https://js.arcgis.com/4.12/esri/themes/dark/main.css"
+    />
+    <script>var dojoConfig = { has: { "esri-workers-for-memory-layers": 1 } };</script>
+    <script src="https://js.arcgis.com/4.12/"></script>
+
+    <script>
+      require([
+        "esri/request",
+        "esri/TimeExtent",
+        "esri/WebScene",
+        "esri/layers/GeoJSONLayer",
+        "esri/layers/FeatureLayer",
+        "esri/views/SceneView",
+        "esri/widgets/Zoom",
+        "esri/widgets/TimeSlider",
+        "esri/widgets/Expand",
+        "esri/widgets/Bookmarks"
+      ], function(esriRequest, TimeExtent, WebScene, GeoJSONLayer, FeatureLayer, SceneView, Zoom, TimeSlider, Expand, Bookmarks) {
+        (async () => {
+          // If GeoJSON files are not on the same domain as your website, a CORS enabled server
+          // or a proxy is required.
+          const url =
+            "./ridgecrest.json";
+
+          const renderer = {
+            type: "simple",
+            field: "mag",
+            symbol: {
+              type: "simple-marker",
+              color: "orange",
+              outline: { color: "white" }
+            },
+            visualVariables: [
+              {
+                type: "size",
+                field: "mag",
+                stops: [
+                  {
+                    value: 2,
+                    size: "1.5625px"
+                  },
+                  {
+                    value: 3,
+                    size: "3.125px"
+                  },
+                  {
+                    value: 4,
+                    size: "6.25px"
+                  },
+                  {
+                    value: 5,
+                    size: "12.5px"
+                  },
+                  {
+                    value: 6,
+                    size: "25px"
+                  },
+                  {
+                    value: 7,
+                    size: "50px"
+                  },
+                  {
+                    value: 8,
+                    size: "100px"
+                  },
+                  {
+                    value: 9,
+                    size: "200px"
+                  }
+                ]
+              }
+            ]
+          };
+
+          const layer = new GeoJSONLayer({
+            url,
+            title: "USGS Earthquakes",
+            copyright: "USGS",
+            renderer,
+            definitionExpression: "type = 'earthquake' and mag > 0",
+            spatialReference: { wkid: 3857 },
+            fields: [
+              { name: "mag", type: "double" },
+              { name: "time", type: "date" },
+              { name: "type", type: "string" },
+              { name: "detail", type: "string" }
+            ],
+            elevationInfo: {
+              mode: "absolute-height",
+              unit: "kilometers",
+              featureExpressionInfo: {
+                expression: "Geometry($feature).z * -1"
+              }
+            },
+            timeInfo: {
+              startField: "time"
+            }
+          });
+
+          // Query for the earthquakes ordered by magnitude.
+          // This will give us the last earthquake in the last week
+          const { features: [lastBigEarthquake] } = await layer.queryFeatures({
+            orderByFields: ["mag DESC", "time DESC"],
+            returnGeometry: true
+          });
+
+          // - Get a 50 kilometers buffer for the clipping area
+          // - Query for all the earthquakes in a 50 kms radius
+          const [{ extent }, { features: nearbyEarthquakes }] = await Promise.all([
+            layer.queryExtent({
+              geometry: lastBigEarthquake.geometry,
+              distance: 50,
+              units: "kilometers"
+            }),
+            layer.queryFeatures({
+              geometry: lastBigEarthquake.geometry,
+              distance: 20,
+              units: "kilometers"
+            })
+          ]);
+
+          // Get the full time extent for those nearby earthquakes
+          const fullTimeExtent = new TimeExtent(nearbyEarthquakes.reduce(
+            (timeExtent, feature) => ({
+              start: Math.min(timeExtent.start, feature.attributes.time),
+              end: Math.max(timeExtent.end, feature.attributes.time),
+            }),
+            { start: Number.POSITIVE_INFINITY, end: Number.NEGATIVE_INFINITY }
+          ));
+          // see 12 hours of data around the earthquake
+          const timeExtent = new TimeExtent({
+            start: new Date(lastBigEarthquake.attributes.time - 6 * 60 * 60 * 1000),
+            end: new Date(lastBigEarthquake.attributes.time + 6 * 60 * 60 * 1000),
+          })
+
+          const scene = new WebScene({
+            basemap: "satellite",
+            layers: [layer],
+            ground: "world-elevation"
+          });
+
+          scene.ground.opacity = 0.5;
+          scene.ground.navigationConstraint = {
+            type: "none"
+          };
+
+          const view = new SceneView({
+            container: "viewDiv",
+            map: scene,
+            qualityProfile: "low",
+            viewingMode: "local",
+            extent,
+            clippingArea: extent,
+            environment: {
+              atmosphereEnabled: false,
+              starsEnabled: false,
+              background: {
+                type: "color",
+                color: "black"
+              }
+            },
+            popup: null,
+            highlightOptions: {
+              fillOpacity: 0,
+              color: "red"
+            },
+            ui: {
+              padding: {
+                top: 80,
+                right: 300
+              },
+              components: ["attribution"]
+            },
+          });
+
+          const zoom = new Zoom({ view, layout: "horizontal" });
+          view.ui.add(zoom, "bottom-left");
+
+          layer.labelingInfo = [
+            {
+              // When using callouts on labels, "above-center" is the only allowed position
+              where: `mag = ${lastBigEarthquake.attributes.mag}`,
+              labelPlacement: "above-center",
+              labelExpressionInfo: {
+                value: "Magnitude {mag}"
+              },
+              symbol: {
+                type: "text",
+                haloColor: "red",
+                haloSize: "2px",
+                color: "orange",
+                font: {
+                  size: 20
+                }
+              }
+            }
+          ];
+
+          const { data: detail } = await esriRequest(lastBigEarthquake.attributes.detail);
+          document.getElementById("titleSpan").innerText = detail.properties.title;
+          document.getElementById("titleSpan").href = detail.properties.url;
+
+          await view.whenLayerView(layer);
+          await view.goTo({
+            target: nearbyEarthquakes,
+            tilt: 120,
+            heading: 45
+          }, { animate: false });
+          document.getElementById("loadingDiv").remove();
+
+          view.whenLayerView(layer).then((layerView) => {
+            layerView.highlight(lastBigEarthquake);
+            const timeSlider = new TimeSlider({
+              view,
+              mode: "time-window",
+              playRate: 64,
+              stops: {
+                interval: {
+                  value: 1,
+                  unit: "hours"
+                },
+              },
+              values: [timeExtent.start, timeExtent.end],
+              fullTimeExtent
+            });
+            view.ui.add(timeSlider, "manual");
+          });
+
+          let layers = await Promise.all([loadContours(detail), loadNearbyCities(detail)]);
+
+          layers = layers.filter(layer => !!layer);
+          scene.addMany(layers);
+        })();
+
+        async function loadContours(earthquakeDetails) {
+          if (!earthquakeDetails.properties.products.shakemap) {
+            return null;
+          }
+
+          function createSymbol(height, color) {
+            return {
+              type: "line-3d",
+              symbolLayers: [
+                {
+                  type: "path",
+                  profile: "quad",
+                  material: {
+                    color
+                  },
+                  width: 10,
+                  height,
+                  join: "round",
+                  cap: "round",
+                  anchor: "bottom",
+                  profileRotation: "heading"
+                }
+              ]
+            };
+          }
+
+          return new GeoJSONLayer({
+            url: earthquakeDetails.properties.products.shakemap[0].contents["download/cont_mi.json"].url,
+            renderer: {
+              type: "unique-value",
+              field: "value",
+              uniqueValueInfos: [
+                { value: 1, symbol: createSymbol(Math.exp(1), "white") },
+                { value: 2, symbol: createSymbol(Math.exp(2), "#bfccff") },
+                { value: 2.5, symbol: createSymbol(Math.exp(2.5), "#b0d9ff") },
+                { value: 3, symbol: createSymbol(Math.exp(3), "#a0e6ff") },
+                { value: 3.5, symbol: createSymbol(Math.exp(3.5), "#90f3ff") },
+                { value: 4, symbol: createSymbol(Math.exp(4), "#80ffff") },
+                { value: 4.5, symbol: createSymbol(Math.exp(4.5), "#7dffc9") },
+                { value: 5, symbol: createSymbol(Math.exp(5), "#7aff93") },
+                { value: 5.5, symbol: createSymbol(Math.exp(5.5), "#bdff4a") },
+                { value: 6, symbol: createSymbol(Math.exp(6), "#ffff00") },
+                { value: 6.5, symbol: createSymbol(Math.exp(6.5), "#ffe300") },
+                { value: 7, symbol: createSymbol(Math.exp(7), "#ffc800") },
+                { value: 7.5, symbol: createSymbol(Math.exp(7.5), "#ffad00") },
+                { value: 8, symbol: createSymbol(Math.exp(8), "#ff9100") },
+                { value: 8.5, symbol: createSymbol(Math.exp(8.5), "#ff4900") },
+                { value: 9, symbol: createSymbol(Math.exp(9), "#ff0000") }
+              ]
+            }
+          });
+        }
+
+        async function loadNearbyCities(earthquakeDetails) {
+          if (!earthquakeDetails.properties.products["nearby-cities"]) {
+            return null;
+          }
+
+          const { data: nearbyCities } = await esriRequest(earthquakeDetails.properties.products["nearby-cities"][0].contents["nearby-cities.json"].url, {
+            responseType: "json"
+          });
+
+          return new FeatureLayer({
+            objectIdField: "OBJECTID",
+            fields: [
+              { name: "direction", type: "string" },
+              { name: "distance", type: "double" },
+              { name: "name", type: "string" },
+            ],
+            source: nearbyCities.map(({ name, longitude, latitude, distance, direction }) => ({
+              geometry: {
+                type: "point",
+                longitude,
+                latitude
+              },
+              attributes: {
+                name,
+                distance,
+                direction
+              }
+            })),
+            renderer: {
+              type: "simple",
+              symbol: {
+                type: "point-3d",
+                symbolLayers: [
+                  {
+                    type: "icon",
+                    resource: {
+                      primitive: "circle"
+                    },
+                    material: {
+                      color: "black"
+                    },
+                    size: 4
+                  }
+                ]
+              }
+            },
+            labelingInfo: [
+              {
+                labelPlacement: "above-center",
+                labelExpressionInfo: {
+                  value: "{name} - {distance}kms"
+                },
+                symbol: {
+                  type: "label-3d",
+                  symbolLayers: [
+                    {
+                      type: "text",
+                      material: {
+                        color: "white"
+                      },
+                      halo: {
+                        color: "black",
+                        size: 2
+                      },
+                      size: 16
+                    }
+                  ],
+                  verticalOffset: {
+                    screenLength: 300,
+                    maxWorldLength: 20000,
+                    minWorldLength: 8000
+                  },
+                  callout: {
+                    type: "line",
+                    size: 0.5,
+                    color: [0, 0, 0],
+                    border: {
+                      color: [255, 255, 255, 0.7]
+                    }
+                  }
+                }
+              }
+            ]
+          });
+        }
+      });
+    </script>
+  </head>
+
+  <body>
+    <div id="viewDiv"></div>
+    <div id="titleDiv"><a id="titleSpan" target="_blank"></a></div>
+    <div id="loadingDiv"><span id="loadingSpan">Fetching the last earthquake data...</span></div>
+  </body>
+</html>
